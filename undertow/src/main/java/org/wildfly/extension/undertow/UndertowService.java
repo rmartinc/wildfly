@@ -33,7 +33,11 @@ import javax.security.jacc.PolicyContext;
 import javax.security.jacc.PolicyContextException;
 
 import io.undertow.Version;
+import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.PathAddress;
+import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
+import org.jboss.as.controller.registry.Resource;
+import org.jboss.dmr.ModelNode;
 import org.jboss.msc.service.Service;
 import org.jboss.msc.service.ServiceName;
 import org.jboss.msc.service.StartContext;
@@ -107,9 +111,42 @@ public class UndertowService implements Service<UndertowService> {
      * @param contextPath The context path
      * @return The legacy deployment service alias
      */
-    @Deprecated
-    public static ServiceName deploymentServiceName(final String serverName, final String virtualHost, final String contextPath) {
-        return WEB_DEPLOYMENT_BASE.append(serverName).append(virtualHost).append("".equals(contextPath) ? "/" : contextPath);
+    //@Deprecated
+    //public static ServiceName deploymentServiceName(final String serverName, final String virtualHost, final String contextPath) {
+    //    return WEB_DEPLOYMENT_BASE.append(serverName).append(virtualHost).append("".equals(contextPath) ? "/" : contextPath);
+    //}
+
+    /**
+     * Method to obtain the deployment service name using the address of the
+     * deployment. The deploymentAddress should be: /deployment=app.war (deployments)
+     * or /deployment=app.ear/subdeployment=app.war (for subdeployments)
+     *
+     * @param deploymentAddress The operation address for the deployment or subdeployment
+     * @param context The operation context for the operation
+     * @return The service name or null
+     */
+    public static ServiceName deploymentServiceName(final PathAddress deploymentAddress, final OperationContext context) {
+        final String type = deploymentAddress.getLastElement().getKey();
+        ServiceName serviceName = null;
+        if (ModelDescriptionConstants.DEPLOYMENT.equals(type)) {
+            // it's a direct deployment application
+            final Resource deployment = context.readResourceFromRoot(deploymentAddress, false);
+            final ModelNode deploymentModel = deployment.getModel();
+            final ModelNode runtimeName = deploymentModel.get(ModelDescriptionConstants.RUNTIME_NAME);
+            if (runtimeName.isDefined()) {
+                serviceName = ServiceName.JBOSS.append("deployment", "unit", runtimeName.asString()).append(UndertowService.UNDERTOW_DEPLOYMENT);
+            }
+        } else if (ModelDescriptionConstants.SUBDEPLOYMENT.equals(type)) {
+            // it's a subdeployment
+            final Resource deployment = context.readResourceFromRoot(deploymentAddress.getParent(), false);
+            final ModelNode deploymentModel = deployment.getModel();
+            final ModelNode runtimeName = deploymentModel.get(ModelDescriptionConstants.RUNTIME_NAME);
+            if (runtimeName.isDefined()) {
+                final String webApp = deploymentAddress.getLastElement().getValue();
+                serviceName = ServiceName.JBOSS.append("deployment", "subunit", runtimeName.asString(), webApp).append(UndertowService.UNDERTOW_DEPLOYMENT);
+            }
+        }
+        return serviceName;
     }
 
     @Deprecated

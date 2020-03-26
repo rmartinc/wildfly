@@ -313,9 +313,11 @@ public class UndertowDeploymentProcessor implements DeploymentUnitProcessor, Fun
         }
 
         final ServiceName hostServiceName = UndertowService.virtualHostName(serverInstanceName, hostName);
-        final ServiceName legacyDeploymentServiceName = UndertowService.deploymentServiceName(serverInstanceName, hostName, pathName);
+        //final ServiceName legacyDeploymentServiceName = UndertowService.deploymentServiceName(serverInstanceName, hostName, pathName);
         final ServiceName deploymentServiceName = UndertowService.deploymentServiceName(deploymentUnit.getServiceName());
 
+        final DeploymentResourceSupport deploymentResourceSupport = deploymentUnit.getAttachment(Attachments.DEPLOYMENT_RESOURCE_SUPPORT);
+        final ModelNode node = deploymentResourceSupport.getDeploymentSubsystemModel(UndertowExtension.SUBSYSTEM_NAME);
 
         TldsMetaData tldsMetaData = deploymentUnit.getAttachment(TldsMetaData.ATTACHMENT_KEY);
         UndertowDeploymentInfoService undertowDeploymentInfoService = UndertowDeploymentInfoService.builder()
@@ -344,12 +346,13 @@ public class UndertowDeploymentProcessor implements DeploymentUnitProcessor, Fun
                 .setTempDir(warMetaData.getTempDir())
                 .setExternalResources(deploymentUnit.getAttachmentList(UndertowAttachments.EXTERNAL_RESOURCES))
                 .setAllowSuspendedRequests(deploymentUnit.getAttachmentList(UndertowAttachments.ALLOW_REQUEST_WHEN_SUSPENDED))
+                .setUndertowModelNode(node)
                 .createUndertowDeploymentInfoService();
 
         final ServiceName deploymentInfoServiceName = deploymentServiceName.append(UndertowDeploymentInfoService.SERVICE_NAME);
-        final ServiceName legacyDeploymentInfoServiceName = legacyDeploymentServiceName.append(UndertowDeploymentInfoService.SERVICE_NAME);
+        //final ServiceName legacyDeploymentInfoServiceName = legacyDeploymentServiceName.append(UndertowDeploymentInfoService.SERVICE_NAME);
         ServiceBuilder<DeploymentInfo> infoBuilder = serviceTarget.addService(deploymentInfoServiceName, undertowDeploymentInfoService)
-                .addAliases(legacyDeploymentInfoServiceName)
+                //.addAliases(legacyDeploymentInfoServiceName)
                 .addDependency(UndertowService.SERVLET_CONTAINER.append(servletContainerName), ServletContainerService.class, undertowDeploymentInfoService.getContainer())
                 .addDependency(UndertowService.UNDERTOW, UndertowService.class, undertowDeploymentInfoService.getUndertowService())
                 .addDependency(hostServiceName, Host.class, undertowDeploymentInfoService.getHost())
@@ -460,7 +463,7 @@ public class UndertowDeploymentProcessor implements DeploymentUnitProcessor, Fun
 
         final UndertowDeploymentService service = new UndertowDeploymentService(injectionContainer, true);
         final ServiceBuilder<UndertowDeploymentService> builder = serviceTarget.addService(deploymentServiceName, service)
-                .addAliases(legacyDeploymentServiceName)
+                //.addAliases(legacyDeploymentServiceName)
                 .addDependency(UndertowService.SERVLET_CONTAINER.append(defaultContainer), ServletContainerService.class, service.getContainer())
                 .addDependency(hostServiceName, Host.class, service.getHost())
                 .addDependency(deploymentInfoServiceName, DeploymentInfo.class, service.getDeploymentInfoInjectedValue());
@@ -498,9 +501,6 @@ public class UndertowDeploymentProcessor implements DeploymentUnitProcessor, Fun
         }
 
         // Process the web related mgmt information
-        final DeploymentResourceSupport deploymentResourceSupport = deploymentUnit.getAttachment(Attachments.DEPLOYMENT_RESOURCE_SUPPORT);
-        final ModelNode node = deploymentResourceSupport.getDeploymentSubsystemModel(UndertowExtension.SUBSYSTEM_NAME);
-        node.get(DeploymentDefinition.CONTEXT_ROOT.getName()).set("".equals(pathName) ? "/" : pathName);
         node.get(DeploymentDefinition.VIRTUAL_HOST.getName()).set(hostName);
         node.get(DeploymentDefinition.SERVER.getName()).set(serverInstanceName);
         processManagement(deploymentUnit, metaData);

@@ -52,11 +52,11 @@ import org.jboss.as.controller.SimpleResourceDefinition;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.descriptions.ResourceDescriptionResolver;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.dmr.Property;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.wildfly.extension.undertow.deployment.UndertowDeploymentService;
 import org.wildfly.extension.undertow.logging.UndertowLogger;
 
@@ -284,20 +284,14 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
 
             final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
 
-            final Resource web = context.readResourceFromRoot(address.subAddress(0, address.size()), false);
-            final ModelNode subModel = web.getModel();
-
-            final String host = VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
-            final String path = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-            final String server = SERVER.resolveModelAttribute(context, subModel).asString();
-
             SessionStat stat = SessionStat.getStat(operation.require(ModelDescriptionConstants.NAME).asString());
 
             if (stat == null) {
                 context.getFailureDescription().set(UndertowLogger.ROOT_LOGGER.unknownMetric(operation.require(ModelDescriptionConstants.NAME).asString()));
             } else {
                 ModelNode result = new ModelNode();
-                final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+                ServiceName serviceName = UndertowService.deploymentServiceName(address.getParent(), context);
+                final ServiceController<?> controller = context.getServiceRegistry(false).getService(serviceName);
                 if (controller != null && controller.getState() != ServiceController.State.UP) {//check if deployment is active at all
                     return;
                 }
@@ -375,14 +369,10 @@ public class DeploymentDefinition extends SimpleResourceDefinition {
 
     private static SessionManager getSessionManager(OperationContext context, ModelNode operation) throws OperationFailedException {
         final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
-        final Resource web = context.readResourceFromRoot(address.subAddress(0, address.size()), false);
-        final ModelNode subModel = web.getModel();
-        final String host = VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
-        final String path = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-        final String server = SERVER.resolveModelAttribute(context, subModel).asString();
+        ServiceName serviceName = UndertowService.deploymentServiceName(address.getParent(), context);
 
         final UndertowDeploymentService deploymentService;
-        final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+        final ServiceController<?> controller = context.getServiceRegistry(false).getService(serviceName);
         if (controller != null && controller.getState() != ServiceController.State.UP) {//check if deployment is active at all
             throw UndertowLogger.ROOT_LOGGER.sessionManagerNotAvailable();
         } else {

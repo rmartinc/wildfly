@@ -22,8 +22,6 @@ package org.jboss.as.jaxrs;
 
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 import static org.wildfly.extension.undertow.DeploymentDefinition.CONTEXT_ROOT;
-import static org.wildfly.extension.undertow.DeploymentDefinition.SERVER;
-import static org.wildfly.extension.undertow.DeploymentDefinition.VIRTUAL_HOST;
 
 import io.undertow.servlet.handlers.ServletHandler;
 import java.util.Collection;
@@ -46,6 +44,7 @@ import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.jboss.resteasy.core.ResourceInvoker;
 import org.jboss.resteasy.core.ResourceMethodInvoker;
 import org.jboss.resteasy.core.ResourceMethodRegistry;
@@ -131,14 +130,12 @@ public class JaxrsDeploymentDefinition extends SimpleResourceDefinition {
         @Override
         public void execute(final OperationContext context, final ModelNode operation) throws OperationFailedException {
             final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
-            //Getting Undertow deployment Model to access Servlet informations.
             final ModelNode subModel = context.readResourceFromRoot(address.subAddress(0, address.size() - 1).append(
                     SUBSYSTEM, UndertowExtension.SUBSYSTEM_NAME), false).getModel();
-            final String host = VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
             final String contextPath = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-            final String server = SERVER.resolveModelAttribute(context, subModel).asString();
+            final ServiceName serviceName = UndertowService.deploymentServiceName(address.getParent(), context);
 
-            final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, contextPath));
+            final ServiceController<?> controller = context.getServiceRegistry(false).getService(serviceName);
             final UndertowDeploymentService deploymentService = (UndertowDeploymentService) controller.getService();
             try {
 

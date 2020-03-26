@@ -39,10 +39,10 @@ import org.jboss.as.controller.SimpleListAttributeDefinition;
 import org.jboss.as.controller.SimpleResourceDefinition;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.registry.Resource;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.wildfly.extension.undertow.deployment.UndertowDeploymentService;
 import org.wildfly.extension.undertow.deployment.UndertowMetricsCollector;
 
@@ -119,18 +119,12 @@ public class DeploymentServletDefinition extends SimpleResourceDefinition {
             @Override
             public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
                 final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
-
-                final Resource web = context.readResourceFromRoot(address.subAddress(0, address.size() - 1), false);
-                final ModelNode subModel = web.getModel();
-
-                final String host = DeploymentDefinition.VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
-                final String path = DeploymentDefinition.CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-                final String server = DeploymentDefinition.SERVER.resolveModelAttribute(context, subModel).asString();
+                final ServiceName serviceName = UndertowService.deploymentServiceName(address.getParent().getParent(), context);
 
                 context.addStep(new OperationStepHandler() {
                     @Override
                     public void execute(final OperationContext context, final ModelNode operation) {
-                        final ServiceController<?> deploymentServiceController = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+                        final ServiceController<?> deploymentServiceController = context.getServiceRegistry(false).getService(serviceName);
                         if (deploymentServiceController == null || deploymentServiceController.getState() != ServiceController.State.UP) {
                             return;
                         }
@@ -156,18 +150,12 @@ public class DeploymentServletDefinition extends SimpleResourceDefinition {
         @Override
         public void execute(final OperationContext context, final ModelNode operation) throws OperationFailedException {
             final PathAddress address = PathAddress.pathAddress(operation.get(ModelDescriptionConstants.OP_ADDR));
-
-            final Resource web = context.readResourceFromRoot(address.subAddress(0, address.size() - 1), false);
-            final ModelNode subModel = web.getModel();
-
-            final String host = DeploymentDefinition.VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
-            final String path = DeploymentDefinition.CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-            final String server = DeploymentDefinition.SERVER.resolveModelAttribute(context, subModel).asString();
+            final ServiceName serviceName = UndertowService.deploymentServiceName(address.getParent().getParent(), context);
 
             context.addStep(new OperationStepHandler() {
                 @Override
                 public void execute(final OperationContext context, final ModelNode operation) {
-                    final ServiceController<?> deploymentServiceController = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, path));
+                    final ServiceController<?> deploymentServiceController = context.getServiceRegistry(false).getService(serviceName);
                     if (deploymentServiceController == null || deploymentServiceController.getState() != ServiceController.State.UP) {
                         return;
                     }

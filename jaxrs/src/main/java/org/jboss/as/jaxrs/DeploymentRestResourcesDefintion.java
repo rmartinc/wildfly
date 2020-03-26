@@ -23,8 +23,6 @@ package org.jboss.as.jaxrs;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.NAME;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
 import static org.wildfly.extension.undertow.DeploymentDefinition.CONTEXT_ROOT;
-import static org.wildfly.extension.undertow.DeploymentDefinition.SERVER;
-import static org.wildfly.extension.undertow.DeploymentDefinition.VIRTUAL_HOST;
 
 import io.undertow.server.HttpServerExchange;
 import io.undertow.servlet.api.ThreadSetupHandler;
@@ -72,6 +70,7 @@ import org.jboss.dmr.ModelType;
 import org.jboss.logmanager.Level;
 import org.jboss.modules.Module;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.jboss.resteasy.core.ResourceInvoker;
 import org.jboss.resteasy.core.ResourceLocatorInvoker;
 import org.jboss.resteasy.core.ResourceMethodInvoker;
@@ -183,9 +182,8 @@ public class DeploymentRestResourcesDefintion extends SimpleResourceDefinition {
             String clsName = address.getLastElement().getValue();
             final PathAddress parentAddress = address.getParent();
             final ModelNode subModel = context.readResourceFromRoot(parentAddress.subAddress(0, parentAddress.size() - 1).append(SUBSYSTEM, UndertowExtension.SUBSYSTEM_NAME), false).getModel();
-            final String host = VIRTUAL_HOST.resolveModelAttribute(context, subModel).asString();
             final String contextPath = CONTEXT_ROOT.resolveModelAttribute(context, subModel).asString();
-            final String server = SERVER.resolveModelAttribute(context, subModel).asString();
+            final ServiceName serviceName = UndertowService.deploymentServiceName(parentAddress.getParent(), context);
 
             Map<PathAddress, UndertowDeploymentService> deploymentServiceMap = context.getAttachment(undertowDeployServiceKey);
             if (deploymentServiceMap == null) {
@@ -194,7 +192,7 @@ public class DeploymentRestResourcesDefintion extends SimpleResourceDefinition {
             }
             UndertowDeploymentService undertowDeploymentService = deploymentServiceMap.get(parentAddress);
             if (undertowDeploymentService == null) {
-                final ServiceController<?> controller = context.getServiceRegistry(false).getService(UndertowService.deploymentServiceName(server, host, contextPath));
+                final ServiceController<?> controller = context.getServiceRegistry(false).getService(serviceName);
                 undertowDeploymentService = (UndertowDeploymentService) controller.getService();
                 deploymentServiceMap.put(parentAddress, undertowDeploymentService);
             }
