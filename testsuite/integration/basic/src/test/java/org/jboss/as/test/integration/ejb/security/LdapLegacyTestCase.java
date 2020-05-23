@@ -15,9 +15,8 @@
  */
 package org.jboss.as.test.integration.ejb.security;
 
-import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.security.Security;
 import java.util.HashMap;
 import java.util.Map;
@@ -58,6 +57,7 @@ import org.jboss.as.test.integration.ejb.security.authorization.SaslLegacyMechan
 import org.jboss.as.test.integration.ejb.security.authorization.SaslLegacyMechanismBeanRemote;
 import org.jboss.as.test.integration.management.util.CLIWrapper;
 import org.jboss.as.test.integration.security.common.AbstractSecurityDomainsServerSetupTask;
+import org.jboss.as.test.integration.security.common.AbstractSystemPropertiesServerSetupTask;
 import org.jboss.as.test.integration.security.common.ManagedCreateLdapServer;
 import org.jboss.as.test.integration.security.common.Utils;
 import org.jboss.as.test.integration.security.common.config.SecurityDomain;
@@ -87,19 +87,20 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Arquillian.class)
 @RunAsClient
-@ServerSetup({LdapLegacyTestCase.LdapServerSetupTask.class, LdapLegacyTestCase.LdapRealmSetup.class, LdapLegacyTestCase.SecurityDomainsSetup.class})
+@ServerSetup({LdapLegacyTestCase.SystemPropertiesSetup.class, LdapLegacyTestCase.LdapServerSetupTask.class,
+    LdapLegacyTestCase.LdapRealmSetup.class, LdapLegacyTestCase.SecurityDomainsSetup.class})
 public class LdapLegacyTestCase {
 
     private static final String MODULE = "LdapLegacyTestCase";
     private static final String KEYSTORE_RESOURCE = "/org/jboss/as/test/integration/security/loginmodules/ldaps.jks";
-    private static Path KEYSTORE_FILE;
+    private static final String KEYSTORE_FILENAME = "ldaps.jks";
+    private static final File KEYSTORE_FILE = new File(KEYSTORE_FILENAME);
     private static final int LDAP_PORT = 10389;
     private static final int LDAPS_PORT = 10636;
     private static final String SECURITY_CREDENTIALS = "secret";
     private static final String SECURITY_PRINCIPAL = "uid=admin,ou=system";
     private static final String LDAP_CONNECTION = MODULE + "-con";
     private static final String LDAP_REALM = MODULE + "-ldap-realm";
-    private static final String TRUSTSTORE_REALM = MODULE + "-truststore-realm";
     private static final String SECURITY_DOMAIN = MODULE + "-domain";
 
     private static final Logger LOGGER = Logger.getLogger(LdapLegacyTestCase.class);
@@ -200,6 +201,23 @@ public class LdapLegacyTestCase {
     }
 
     /**
+     * This setup task sets truststore file.
+     */
+    static class SystemPropertiesSetup extends AbstractSystemPropertiesServerSetupTask {
+
+        /**
+         * @see org.jboss.as.test.integration.security.common.AbstractSystemPropertiesServerSetupTask#getSystemProperties()
+         */
+        @Override
+        protected AbstractSystemPropertiesServerSetupTask.SystemProperty[] getSystemProperties() {
+            return new SystemProperty[] {
+                new DefaultSystemProperty("javax.net.ssl.trustStore", KEYSTORE_FILE.getAbsolutePath()),
+                new DefaultSystemProperty("com.sun.jndi.ldap.object.disableEndpointIdentification", "")
+            };
+        }
+    }
+
+    /**
      * Creates the security domain to use in the application that uses the ldap realm.
      * It's just a RealmDirect to use the same ldap realm created in the other task.
      */
@@ -254,11 +272,8 @@ public class LdapLegacyTestCase {
                 // create the ldap realm and assign it to the remoting endpoint
                 try (CLIWrapper cli = new CLIWrapper(true)) {
                     cli.sendLine("batch");
-                    cli.sendLine(String.format("/core-service=management/security-realm=\"%s\":add()", TRUSTSTORE_REALM));
-                    cli.sendLine(String.format("/core-service=management/security-realm=\"%s\"/authentication=truststore:add(keystore-path=\"%s\", keystore-password=\"secret\")",
-                            TRUSTSTORE_REALM, KEYSTORE_FILE.toAbsolutePath().toString().replace("\\", "\\\\")));
-                    cli.sendLine(String.format("/core-service=management/ldap-connection=\"%s\":add(url=\"%s\", search-dn=\"%s\", search-credential=\"%s\", security-realm=\"%s\")",
-                            LDAP_CONNECTION, "ldaps://" + Utils.getSecondaryTestAddress(mc) + ":" + LDAPS_PORT, SECURITY_PRINCIPAL, SECURITY_CREDENTIALS, TRUSTSTORE_REALM));
+                    cli.sendLine(String.format("/core-service=management/ldap-connection=\"%s\":add(url=\"%s\", search-dn=\"%s\", search-credential=\"%s\")",
+                            LDAP_CONNECTION, "ldaps://" + Utils.getSecondaryTestAddress(mc) + ":" + LDAPS_PORT, SECURITY_PRINCIPAL, SECURITY_CREDENTIALS));
                     cli.sendLine(String.format("/core-service=management/security-realm=\"%s\":add()", LDAP_REALM));
                     cli.sendLine(String.format("/core-service=management/security-realm=\"%s\"/authentication=ldap:add(connection=\"%s\", base-dn=\"ou=People,dc=jboss,dc=org\", username-attribute=uid)",
                             LDAP_REALM, LDAP_CONNECTION));
@@ -285,7 +300,6 @@ public class LdapLegacyTestCase {
                     cli.sendLine(String.format("/subsystem=remoting/http-connector=http-remoting-connector:write-attribute(name=security-realm, value=\"%s\")", previousSecurityRealm));
                     cli.sendLine(String.format("/core-service=management/security-realm=\"%s\":remove", LDAP_REALM));
                     cli.sendLine(String.format("/core-service=management/ldap-connection=\"%s\":remove", LDAP_CONNECTION));
-                    cli.sendLine(String.format("/core-service=management/security-realm=\"%s\":remove", TRUSTSTORE_REALM));
                     cli.sendLine("run-batch");
                 }
             }
@@ -359,11 +373,10 @@ public class LdapLegacyTestCase {
             }
             final ManagedCreateLdapServer createLdapServer = new ManagedCreateLdapServer(
                     (CreateLdapServer) AnnotationUtils.getInstance(CreateLdapServer.class));
-            KEYSTORE_FILE = Files.createTempFile("ldaps", ".jks");
-            try (OutputStream fos = Files.newOutputStream(KEYSTORE_FILE)) {
+            try (FileOutputStream fos = new FileOutputStream(KEYSTORE_FILE);) {
                 IOUtils.copy(getClass().getResourceAsStream(KEYSTORE_RESOURCE), fos);
             }
-            createLdapServer.setKeyStore(KEYSTORE_FILE.toAbsolutePath().toString());
+            createLdapServer.setKeyStore(KEYSTORE_FILE.getAbsolutePath());
             Utils.fixApacheDSTransportAddress(createLdapServer, Utils.getSecondaryTestAddress(managementClient, false));
             ldapServer = ServerAnnotationProcessor.instantiateLdapServer(createLdapServer, directoryService);
             ldapServer.start();
@@ -381,7 +394,7 @@ public class LdapLegacyTestCase {
         public void tearDown(ManagementClient managementClient, String containerId) throws Exception {
             ldapServer.stop();
             directoryService.shutdown();
-            Files.delete(KEYSTORE_FILE);
+            KEYSTORE_FILE.delete();
             FileUtils.deleteDirectory(directoryService.getInstanceLayout().getInstanceDirectory());
             if (removeBouncyCastle) {
                 try {
